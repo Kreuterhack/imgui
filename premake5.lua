@@ -42,3 +42,8 @@ project "ImGui"
 		runtime "Release"
 		optimize "on"
         symbols "off"
+
+	filter "action:vs*"
+		-- Entferne vcpkg targets
+		removefiles { "$(VcpkgRoot)\\scripts\\buildsystems\\vcpkg.targets" }
+		buildoptions { "/DVCPKG_DISABLE=1" }
