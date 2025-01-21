@@ -62,14 +62,16 @@
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #endif
 
+// Current version of the backend use 1 descriptor for the font atlas + as many as additional calls done to ImGui_ImplVulkan_AddTexture().
+// It is expected that as early as Q1 2025 the backend will use a few more descriptors. Use this value + number of desired calls to ImGui_ImplVulkan_AddTexture().
+#define IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE   (1)     // Minimum per atlas
+
 // Initialization data, for ImGui_ImplVulkan_Init()
 // [Please zero-clear before use!]
 // - About descriptor pool:
 //   - A VkDescriptorPool should be created with VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
 //     and must contain a pool size large enough to hold a small number of VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER descriptors.
 //   - As an convenience, by setting DescriptorPoolSize > 0 the backend will create one for you.
-//   - Current version of the backend use 1 descriptor for the font atlas + as many as additional calls done to ImGui_ImplVulkan_AddTexture().
-//   - It is expected that as early as Q1 2025 the backend will use a few more descriptors, so aim at 10 + number of desierd calls to ImGui_ImplVulkan_AddTexture().
 // - About dynamic rendering:
 //   - When using dynamic rendering, set UseDynamicRendering=true and fill PipelineRenderingCreateInfo structure.
 struct ImGui_ImplVulkan_InitInfo
@@ -205,8 +207,8 @@ struct ImGui_ImplVulkanH_Window
     uint32_t            ImageCount;             // Number of simultaneous in-flight frames (returned by vkGetSwapchainImagesKHR, usually derived from min_image_count)
     uint32_t            SemaphoreCount;         // Number of simultaneous in-flight frames + 1, to be able to use it in vkAcquireNextImageKHR
     uint32_t            SemaphoreIndex;         // Current set of swapchain wait semaphores we're using (needs to be distinct from per frame data)
-    ImGui_ImplVulkanH_Frame*            Frames;
-    ImGui_ImplVulkanH_FrameSemaphores*  FrameSemaphores;
+    ImVector<ImGui_ImplVulkanH_Frame>           Frames;
+    ImVector<ImGui_ImplVulkanH_FrameSemaphores> FrameSemaphores;
 
     ImGui_ImplVulkanH_Window()
     {
