@@ -29,7 +29,7 @@
 // Library Version
 // (Integer encoded as XYYZZ for use in #if preprocessor conditionals, e.g. '#if IMGUI_VERSION_NUM >= 12345')
 #define IMGUI_VERSION       "1.91.8 WIP"
-#define IMGUI_VERSION_NUM   19172
+#define IMGUI_VERSION_NUM   19173
 #define IMGUI_HAS_TABLE
 
 /*
@@ -1011,6 +1011,7 @@ namespace ImGui
     IMGUI_API bool          IsMouseClicked(ImGuiMouseButton button, bool repeat = false);       // did mouse button clicked? (went from !Down to Down). Same as GetMouseClickedCount() == 1.
     IMGUI_API bool          IsMouseReleased(ImGuiMouseButton button);                           // did mouse button released? (went from Down to !Down)
     IMGUI_API bool          IsMouseDoubleClicked(ImGuiMouseButton button);                      // did mouse button double-clicked? Same as GetMouseClickedCount() == 2. (note that a double-click will also report IsMouseClicked() == true)
+    IMGUI_API bool          IsMouseReleasedWithDelay(ImGuiMouseButton button, float delay);     // delayed mouse release (use very sparingly!). Generally used with 'delay >= io.MouseDoubleClickTime' + combined with a 'io.MouseClickedLastCount==1' test. This is a very rarely used UI idiom, but some apps use this: e.g. MS Explorer single click on an icon to rename.
     IMGUI_API int           GetMouseClickedCount(ImGuiMouseButton button);                      // return the number of successive mouse-clicks at the time where a click happen (otherwise 0).
     IMGUI_API bool          IsMouseHoveringRect(const ImVec2& r_min, const ImVec2& r_max, bool clip = true);// is mouse hovering given bounding rect (in screen space). clipped by current clipping settings, but disregarding of other consideration of focus/window ordering/popup-block.
     IMGUI_API bool          IsMousePosValid(const ImVec2* mouse_pos = NULL);                    // by convention we use (-FLT_MAX,-FLT_MAX) to denote that there is no mouse available
@@ -1752,8 +1753,14 @@ enum ImGuiColorEditFlags_
     ImGuiColorEditFlags_NoSidePreview   = 1 << 8,   //              // ColorPicker: disable bigger color preview on right side of the picker, use small color square preview instead.
     ImGuiColorEditFlags_NoDragDrop      = 1 << 9,   //              // ColorEdit: disable drag and drop target. ColorButton: disable drag and drop source.
     ImGuiColorEditFlags_NoBorder        = 1 << 10,  //              // ColorButton: disable border (which is enforced by default)
-    ImGuiColorEditFlags_AlphaPreview    = 1 << 11,  //              // ColorEdit, ColorPicker, ColorButton: display preview as a transparent color over a checkerboard, instead of opaque.
-    ImGuiColorEditFlags_AlphaPreviewHalf= 1 << 12,  //              // ColorEdit, ColorPicker, ColorButton: display half opaque / half checkerboard, instead of opaque.
+
+    // Alpha preview
+    // - Prior to 1.91.8 (2025/01/21): alpha was made opaque in the preview by default using old name ImGuiColorEditFlags_AlphaPreview.
+    // - We now display the preview as transparent by default. You can use ImGuiColorEditFlags_AlphaOpaque to use old behavior.
+    // - The new flags may be combined better and allow finer controls.
+    ImGuiColorEditFlags_AlphaOpaque     = 1 << 11,  //              // ColorEdit, ColorPicker, ColorButton: disable alpha in the preview,. Contrary to _NoAlpha it may still be edited when calling ColorEdit4()/ColorPicker4(). For ColorButton() this does the same as _NoAlpha.
+    ImGuiColorEditFlags_AlphaNoBg       = 1 << 12,  //              // ColorEdit, ColorPicker, ColorButton: disable rendering a checkerboard background behind transparent color.
+    ImGuiColorEditFlags_AlphaPreviewHalf= 1 << 13,  //              // ColorEdit, ColorPicker, ColorButton: display half opaque / half transparent preview.
 
     // User Options (right-click on widget to change some of them).
     ImGuiColorEditFlags_AlphaBar        = 1 << 16,  //              // ColorEdit, ColorPicker: show vertical alpha bar/gradient in picker.
@@ -1773,12 +1780,16 @@ enum ImGuiColorEditFlags_
     ImGuiColorEditFlags_DefaultOptions_ = ImGuiColorEditFlags_Uint8 | ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_PickerHueBar,
 
     // [Internal] Masks
+    ImGuiColorEditFlags_AlphaMask_      = ImGuiColorEditFlags_NoAlpha | ImGuiColorEditFlags_AlphaOpaque | ImGuiColorEditFlags_AlphaNoBg | ImGuiColorEditFlags_AlphaPreviewHalf,
     ImGuiColorEditFlags_DisplayMask_    = ImGuiColorEditFlags_DisplayRGB | ImGuiColorEditFlags_DisplayHSV | ImGuiColorEditFlags_DisplayHex,
     ImGuiColorEditFlags_DataTypeMask_   = ImGuiColorEditFlags_Uint8 | ImGuiColorEditFlags_Float,
     ImGuiColorEditFlags_PickerMask_     = ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_PickerHueBar,
     ImGuiColorEditFlags_InputMask_      = ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_InputHSV,
 
     // Obsolete names
+#ifndef IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+    ImGuiColorEditFlags_AlphaPreview = 0,         // [Removed in 1.91.8] This is the default now. Will display a checkerboard unless ImGuiColorEditFlags_AlphaNoBg is set.
+#endif
     //ImGuiColorEditFlags_RGB = ImGuiColorEditFlags_DisplayRGB, ImGuiColorEditFlags_HSV = ImGuiColorEditFlags_DisplayHSV, ImGuiColorEditFlags_HEX = ImGuiColorEditFlags_DisplayHex  // [renamed in 1.69]
 };
 
@@ -2405,6 +2416,7 @@ struct ImGuiIO
     ImU16       MouseClickedCount[5];               // == 0 (not clicked), == 1 (same as MouseClicked[]), == 2 (double-clicked), == 3 (triple-clicked) etc. when going from !Down to Down
     ImU16       MouseClickedLastCount[5];           // Count successive number of clicks. Stays valid after mouse release. Reset after another click is done.
     bool        MouseReleased[5];                   // Mouse button went from Down to !Down
+    double      MouseReleasedTime[5];               // Time of last released (rarely used! but useful to handle delayed single-click when trying to disambiguate them from double-click).
     bool        MouseDownOwned[5];                  // Track if button was clicked inside a dear imgui window or over void blocked by a popup. We don't request mouse capture from the application if click started outside ImGui bounds.
     bool        MouseDownOwnedUnlessPopupClose[5];  // Track if button was clicked inside a dear imgui window.
     bool        MouseWheelRequestAxisSwap;          // On a non-Mac system, holding SHIFT requests WheelY to perform the equivalent of a WheelX event. On a Mac system this is already enforced by the system.
@@ -3242,8 +3254,8 @@ struct ImFontConfig
     bool            MergeMode;              // false    // Merge into previous ImFont, so you can combine multiple inputs font into one ImFont (e.g. ASCII font + icons + Japanese glyphs). You may want to use GlyphOffset.y when merge font of different heights.
     bool            PixelSnapH;             // false    // Align every glyph AdvanceX to pixel boundaries. Useful e.g. if you are merging a non-pixel aligned font with the default font. If enabled, you can set OversampleH/V to 1.
     int             FontNo;                 // 0        // Index of font within TTF/OTF file
-    int             OversampleH;            // 2        // Rasterize at higher quality for sub-pixel positioning. Note the difference between 2 and 3 is minimal. You can reduce this to 1 for large glyphs save memory. Read https://github.com/nothings/stb/blob/master/tests/oversample/README.md for details.
-    int             OversampleV;            // 1        // Rasterize at higher quality for sub-pixel positioning. This is not really useful as we don't use sub-pixel positions on the Y axis.
+    int             OversampleH;            // 0 (2)    // Rasterize at higher quality for sub-pixel positioning. 0 == auto == 1 or 2 depending on size. Note the difference between 2 and 3 is minimal. You can reduce this to 1 for large glyphs save memory. Read https://github.com/nothings/stb/blob/master/tests/oversample/README.md for details.
+    int             OversampleV;            // 0 (1)    // Rasterize at higher quality for sub-pixel positioning. 0 == auto == 1. This is not really useful as we don't use sub-pixel positions on the Y axis.
     float           SizePixels;             //          // Size in pixels for rasterizer (more or less maps to the resulting font height).
     ImVec2          GlyphExtraSpacing;      // 0, 0     // Extra spacing (in pixels) between glyphs when rendered: essentially add to glyph->AdvanceX. Only X axis is supported for now.
     ImVec2          GlyphOffset;            // 0, 0     // Offset all glyphs from this font input.
@@ -3343,8 +3355,8 @@ struct ImFontAtlas
     IMGUI_API ImFont*           AddFontFromMemoryCompressedTTF(const void* compressed_font_data, int compressed_font_data_size, float size_pixels, const ImFontConfig* font_cfg = NULL, const ImWchar* glyph_ranges = NULL); // 'compressed_font_data' still owned by caller. Compress with binary_to_compressed_c.cpp.
     IMGUI_API ImFont*           AddFontFromMemoryCompressedBase85TTF(const char* compressed_font_data_base85, float size_pixels, const ImFontConfig* font_cfg = NULL, const ImWchar* glyph_ranges = NULL);              // 'compressed_font_data_base85' still owned by caller. Compress with binary_to_compressed_c.cpp with -base85 parameter.
     IMGUI_API void              ClearInputData();           // Clear input data (all ImFontConfig structures including sizes, TTF data, glyph ranges, etc.) = all the data used to build the texture and fonts.
+    IMGUI_API void              ClearFonts();               // Clear input+output font data (same as ClearInputData() + glyphs storage, UV coordinates).
     IMGUI_API void              ClearTexData();             // Clear output texture data (CPU side). Saves RAM once the texture has been copied to graphics memory.
-    IMGUI_API void              ClearFonts();               // Clear output font data (glyphs storage, UV coordinates).
     IMGUI_API void              Clear();                    // Clear all input and output.
 
     // Build atlas, retrieve pixel data.
@@ -3439,28 +3451,28 @@ struct ImFontAtlas
 struct ImFont
 {
     // [Internal] Members: Hot ~20/24 bytes (for CalcTextSize)
-    ImVector<float>             IndexAdvanceX;      // 12-16 // out //            // Sparse. Glyphs->AdvanceX in a directly indexable way (cache-friendly for CalcTextSize functions which only this info, and are often bottleneck in large UI).
+    ImVector<float>             IndexAdvanceX;      // 12-16 // out // Sparse. Glyphs->AdvanceX in a directly indexable way (cache-friendly for CalcTextSize functions which only this info, and are often bottleneck in large UI).
     float                       FallbackAdvanceX;   // 4     // out // = FallbackGlyph->AdvanceX
-    float                       FontSize;           // 4     // in  //            // Height of characters/line, set during loading (don't change after loading)
+    float                       FontSize;           // 4     // in  // Height of characters/line, set during loading (don't change after loading)
 
     // [Internal] Members: Hot ~28/40 bytes (for RenderText loop)
-    ImVector<ImWchar>           IndexLookup;        // 12-16 // out //            // Sparse. Index glyphs by Unicode code-point.
-    ImVector<ImFontGlyph>       Glyphs;             // 12-16 // out //            // All glyphs.
+    ImVector<ImU16>             IndexLookup;        // 12-16 // out // Sparse. Index glyphs by Unicode code-point.
+    ImVector<ImFontGlyph>       Glyphs;             // 12-16 // out // All glyphs.
     const ImFontGlyph*          FallbackGlyph;      // 4-8   // out // = FindGlyph(FontFallbackChar)
 
     // [Internal] Members: Cold ~32/40 bytes
     // Conceptually ConfigData[] is the list of font sources merged to create this font.
-    ImFontAtlas*                ContainerAtlas;     // 4-8   // out //            // What we has been loaded into
-    const ImFontConfig*         ConfigData;         // 4-8   // in  //            // Pointer within ContainerAtlas->ConfigData to ConfigDataCount instances
-    short                       ConfigDataCount;    // 2     // in  // ~ 1        // Number of ImFontConfig involved in creating this font. Bigger than 1 when merging multiple font sources into one ImFont.
+    ImFontAtlas*                ContainerAtlas;     // 4-8   // out // What we has been loaded into
+    const ImFontConfig*         ConfigData;         // 4-8   // in  // Pointer within ContainerAtlas->ConfigData to ConfigDataCount instances
+    short                       ConfigDataCount;    // 2     // in  // Number of ImFontConfig involved in creating this font. Usually 1, or >1 when merging multiple font sources into one ImFont.
     short                       EllipsisCharCount;  // 1     // out // 1 or 3
-    ImWchar                     EllipsisChar;       // 2-4   // out // = '...'/'.'// Character used for ellipsis rendering.
-    ImWchar                     FallbackChar;       // 2-4   // out // = FFFD/'?' // Character used if a glyph isn't found.
-    float                       EllipsisWidth;      // 4     // out               // Width
-    float                       EllipsisCharStep;   // 4     // out               // Step between characters when EllipsisCount > 0
-    float                       Scale;              // 4     // in  // = 1.f      // Base font scale, multiplied by the per-window font scale which you can adjust with SetWindowFontScale()
-    float                       Ascent, Descent;    // 4+4   // out //            // Ascent: distance from top to bottom of e.g. 'A' [0..FontSize] (unscaled)
-    int                         MetricsTotalSurface;// 4     // out //            // Total surface in pixels to get an idea of the font rasterization/texture cost (not exact, we approximate the cost of padding between glyphs)
+    ImWchar                     EllipsisChar;       // 2-4   // out // Character used for ellipsis rendering ('...').
+    ImWchar                     FallbackChar;       // 2-4   // out // Character used if a glyph isn't found (U+FFFD, '?')
+    float                       EllipsisWidth;      // 4     // out // Total ellipsis Width
+    float                       EllipsisCharStep;   // 4     // out // Step between characters when EllipsisCount > 0
+    float                       Scale;              // 4     // in  // Base font scale (1.0f), multiplied by the per-window font scale which you can adjust with SetWindowFontScale()
+    float                       Ascent, Descent;    // 4+4   // out // Ascent: distance from top to bottom of e.g. 'A' [0..FontSize] (unscaled)
+    int                         MetricsTotalSurface;// 4     // out // Total surface in pixels to get an idea of the font rasterization/texture cost (not exact, we approximate the cost of padding between glyphs)
     bool                        DirtyLookupTables;  // 1     // out //
     ImU8                        Used8kPagesMap[(IM_UNICODE_CODEPOINT_MAX+1)/8192/8]; // 1 bytes if ImWchar=ImWchar16, 16 bytes if ImWchar==ImWchar32. Store 1-bit for each block of 4K codepoints that has one active glyph. This is mainly used to facilitate iterations across all used codepoints.
 
@@ -3469,9 +3481,9 @@ struct ImFont
     IMGUI_API ~ImFont();
     IMGUI_API const ImFontGlyph*FindGlyph(ImWchar c);
     IMGUI_API const ImFontGlyph*FindGlyphNoFallback(ImWchar c);
-    float                       GetCharAdvance(ImWchar c)           { return ((int)c < IndexAdvanceX.Size) ? IndexAdvanceX[(int)c] : FallbackAdvanceX; }
-    bool                        IsLoaded() const                    { return ContainerAtlas != NULL; }
-    const char*                 GetDebugName() const                { return ConfigData ? ConfigData->Name : "<unknown>"; }
+    float                       GetCharAdvance(ImWchar c)       { return ((int)c < IndexAdvanceX.Size) ? IndexAdvanceX[(int)c] : FallbackAdvanceX; }
+    bool                        IsLoaded() const                { return ContainerAtlas != NULL; }
+    const char*                 GetDebugName() const            { return ConfigData ? ConfigData->Name : "<unknown>"; }
 
     // 'max_width' stops rendering after a certain width (could be turned into a 2d size). FLT_MAX to disable.
     // 'wrap_width' enable automatic word-wrapping across multiple lines to fit into given width. 0.0f to disable.
