@@ -1,0 +1,21 @@
+name: Sync Fork
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # Läuft jeden Tag um Mitternacht UTC
+  workflow_dispatch:  # Manuelles Triggern
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Sync Fork
+        uses: tgymnich/fork-sync@v1.6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          owner: ORIGINAL_OWNER  # Ersetze mit dem Upstream-Repo-Besitzer
+          repo: ORIGINAL_REPO    # Ersetze mit dem Upstream-Repo-Namen
+          merge_method: rebase
