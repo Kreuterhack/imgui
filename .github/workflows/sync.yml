@@ -16,6 +16,6 @@ jobs:
         uses: tgymnich/fork-sync@v1.6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          owner: ORIGINAL_OWNER  # Ersetze mit dem Upstream-Repo-Besitzer
-          repo: ORIGINAL_REPO    # Ersetze mit dem Upstream-Repo-Namen
+          owner: ocornut
+          repo: ocornut/imgui
           merge_method: rebase
