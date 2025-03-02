@@ -1,7 +1,7 @@
 project "ImGui"
 	kind "StaticLib"
 	language "C++"
-    staticruntime "on"
+    staticruntime "off"
 
 	targetdir ("bin/" .. outputdir .. "/%{prj.name}")
 	objdir ("bin-int/" .. outputdir .. "/%{prj.name}")
@@ -23,12 +23,12 @@ project "ImGui"
 
 	filter "system:windows"
 		systemversion "latest"
-		cppdialect "C++17"
+		cppdialect "C++latest"
 
 	filter "system:linux"
 		pic "On"
 		systemversion "latest"
-		cppdialect "C++17"
+		cppdialect "C++latest"
 
 	filter "configurations:Debug"
 		runtime "Debug"
@@ -42,8 +42,3 @@ project "ImGui"
 		runtime "Release"
 		optimize "on"
         symbols "off"
-
-	filter "action:vs*"
-		-- Entferne vcpkg targets
-		removefiles { "$(VcpkgRoot)\\scripts\\buildsystems\\vcpkg.targets" }
-		buildoptions { "/DVCPKG_DISABLE=1" }
