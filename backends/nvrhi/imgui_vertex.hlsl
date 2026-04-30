@@ -23,6 +23,7 @@
 struct Constants
 {
     float2 invDisplaySize;
+    float2 displayPos;
 };
 
 ConstantBuffer<Constants> g_Const : register(b0, space0);
@@ -44,7 +45,7 @@ struct PS_INPUT
 PS_INPUT main(VS_INPUT input)
 {
     PS_INPUT output;
-    output.out_pos.xy = input.pos.xy * g_Const.invDisplaySize * float2(2.0, -2.0) + float2(-1.0, 1.0);
+    output.out_pos.xy = (input.pos.xy - g_Const.displayPos) * g_Const.invDisplaySize; // * float2(2.0, -2.0) + float2(-1.0, 1.0);
     output.out_pos.zw = float2(0, 1);
     output.out_col = input.col;
     output.out_uv = input.uv;

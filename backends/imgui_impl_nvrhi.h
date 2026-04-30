@@ -57,7 +57,7 @@ SOFTWARE.
 
 struct ImGui_NVRHI
 {
-    nvrhi::IDevice* m_device;
+    nvrhi::vulkan::IDevice* m_device;
     nvrhi::CommandListHandle m_commandList;
 
     nvrhi::ShaderHandle vertexShader;
@@ -76,13 +76,20 @@ struct ImGui_NVRHI
     nvrhi::BindingLayoutHandle bindingLayout;
     nvrhi::GraphicsPipelineDesc basePSODesc;
 
-    nvrhi::GraphicsPipelineHandle pso;
-    std::unordered_map<nvrhi::ITexture*, nvrhi::BindingSetHandle> bindingsCache;
+    std::unordered_map<nvrhi::FramebufferInfo, nvrhi::GraphicsPipelineHandle> m_psoCache;
+
+    VkInstance m_Instance;
+    VkPhysicalDevice m_PhysicalDevice;
+    VkDevice m_LogicalDevice;
+    VkQueue m_PresentQueue;
+
+    std::optional<uint32_t> m_GraphicsFamily;
+    std::optional<uint32_t> m_PresentFamily;
 
     std::vector<ImDrawVert> vtxBuffer;
     std::vector<ImDrawIdx> idxBuffer;
 
-    bool init(nvrhi::IDevice* device);
+    bool init(nvrhi::vulkan::IDevice* device, VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice logicalDevice, VkQueue presentQueue, std::optional<uint32_t> graphicsFamily, std::optional<uint32_t> presentFamily);
     bool updateFontTexture();
     bool render(nvrhi::IFramebuffer* framebuffer);
     void backbufferResizing();
@@ -91,8 +98,19 @@ struct ImGui_NVRHI
 private:
     bool reallocateBuffer(nvrhi::BufferHandle& buffer, size_t requiredSize, size_t reallocateSize, bool isIndexBuffer);
 
+    void renderViewport(nvrhi::FramebufferHandle framebuffer, ImDrawData* drawData);
+
+    void RecreateSwapchain(ImGuiViewport* viewport);
+
+    void CreateWindowForViewport(ImGuiViewport* viewport);
+    void DestroyWindowForViewport(ImGuiViewport* viewport);
+
+    nvrhi::FramebufferHandle GetFramebufferForViewport(ImGuiViewport* viewport);
+
+    void EndFrame(ImGuiViewport* viewport);
+
 
     nvrhi::IGraphicsPipeline* getPSO(nvrhi::FramebufferInfo const& framebufferInfo);
-    nvrhi::IBindingSet* getBindingSet(nvrhi::ITexture* texture);
-    bool updateGeometry(nvrhi::ICommandList* commandList);
+    nvrhi::BindingSetHandle getBindingSet(nvrhi::ITexture* texture);
+    bool updateGeometry(nvrhi::ICommandList* commandList, ImDrawData* drawData);
 };
