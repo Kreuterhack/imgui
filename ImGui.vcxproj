@@ -130,8 +130,6 @@
     </ProjectReference>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\Zoop-Editor\imgui_pixel.hlsl.spv.h" />
-    <ClInclude Include="..\..\..\Zoop-Editor\imgui_vertex.hlsl.spv.h" />
     <ClInclude Include="imconfig.h" />
     <ClInclude Include="imgui.h" />
     <ClInclude Include="imgui_internal.h" />
